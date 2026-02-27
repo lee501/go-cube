@@ -185,6 +185,55 @@ func TestBuildQuery_TimeDimensionRelative(t *testing.T) {
 	}
 }
 
+func TestBuildQuery_TimeDimensionThisMonth(t *testing.T) {
+	req := &QueryRequest{
+		Dimensions: []string{"AccessView.ts"},
+		TimeDimensions: []TimeDimension{
+			{
+				Dimension: "AccessView.ts",
+				DateRange: DateRange{V: "this month"},
+			},
+		},
+	}
+
+	sql, params, err := BuildQuery(req, testCube())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !contains(sql, "toStartOfMonth(now())") {
+		t.Errorf("expected toStartOfMonth(now()) in SQL, got: %s", sql)
+	}
+	if len(params) != 0 {
+		t.Errorf("expected no bind params, got: %v", params)
+	}
+}
+
+func TestBuildQuery_TimeDimensionLastMonth(t *testing.T) {
+	req := &QueryRequest{
+		Dimensions: []string{"AccessView.ts"},
+		TimeDimensions: []TimeDimension{
+			{
+				Dimension: "AccessView.ts",
+				DateRange: DateRange{V: "last month"},
+			},
+		},
+	}
+
+	sql, params, err := BuildQuery(req, testCube())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !contains(sql, "toStartOfMonth(now() - INTERVAL 1 MONTH)") {
+		t.Errorf("expected toStartOfMonth(now() - INTERVAL 1 MONTH) in SQL, got: %s", sql)
+	}
+	if !contains(sql, ">=") || !contains(sql, "<=") {
+		t.Errorf("expected >= and <= for range, got: %s", sql)
+	}
+	if len(params) != 0 {
+		t.Errorf("expected no bind params, got: %v", params)
+	}
+}
+
 func TestValidateQuery_Valid(t *testing.T) {
 	req := &QueryRequest{Dimensions: []string{"AccessView.id"}}
 	if err := validateQuery(req); err != nil {

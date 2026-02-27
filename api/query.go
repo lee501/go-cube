@@ -306,9 +306,20 @@ func convertOperator(op string) string {
 
 // parseRelativeTimeRange 解析相对时间范围字符串并转换为 ClickHouse 表达式
 // 支持格式: "from X to Y" 或 "X to Y"
+// 也支持 "this month", "last month" 等月份范围
 // 返回 startExpr, endExpr, isRange (ClickHouse SQL 表达式)
 func parseRelativeTimeRange(s string) (string, string, bool) {
 	s = strings.TrimSpace(s)
+
+	// 处理 "this month"
+	if s == "this month" {
+		return "toStartOfMonth(now())", "toStartOfMonth(now() + INTERVAL 1 MONTH)", true
+	}
+	// 处理 "last month"
+	if s == "last month" {
+		return "toStartOfMonth(now() - INTERVAL 1 MONTH)", "toStartOfMonth(now())", true
+	}
+
 	// 尝试匹配 "from ... to ..." 或 "... to ..." 格式
 	if strings.HasPrefix(s, "from ") {
 		s = s[5:] // 去掉 "from " 前缀
