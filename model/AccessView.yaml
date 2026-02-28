@@ -176,7 +176,7 @@ cube:
       title: 请求大小
 
     responseRisk:
-      sql: res_risk
+      sql: arrayFilter(x -> dictGetInt64('default.risk_dict','score',x)!=0,res_risk)
       type: array
       title: 响应风险
 
@@ -260,6 +260,11 @@ cube:
       sql: req_risk
       type: array
       title: 请求风险规则过滤器
+
+    resRiskFilterTag:
+      sql: res_risk
+      type: array
+      title: 响应风险规则过滤器
 
     sensKeyFilterTag:
       sql: arrayConcat(req_sens_k, res_sens_k)
