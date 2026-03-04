@@ -968,11 +968,6 @@ cube:
       type: number
       title: 弱点打分
 
-    aggResSensKey:
-      sql: groupUniqArrayArray(res_sens_k)
-      type: string
-      title: 响应敏感信息类型
-
     aggResSensValNum:
       sql: uniqHLL12Array(res_sens_v)
       type: number
