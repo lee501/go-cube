@@ -73,12 +73,12 @@ func (h *Handler) HandleLoad(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.load(ctx, body)
+	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
