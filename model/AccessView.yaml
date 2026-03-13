@@ -566,10 +566,6 @@ cube:
       type: string
       title: 是否敏感文件
 
-    isWeak:
-      sql: "length(weak_k) > 0"
-      type: string
-      title: 是否含弱点
 
     reqBody:
       sql: req_body
@@ -661,6 +657,11 @@ cube:
       sql: weak_v
       type: string
       title: 弱点
+
+    risk:
+      sql: arrayJoin(arrayFilter(x -> dictGetInt64('default.risk_dict','score',x)!=0,req_risk))
+      type: string
+      title: 风险规则
 
   segments:
     org:

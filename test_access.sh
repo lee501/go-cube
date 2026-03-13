@@ -76,6 +76,74 @@ result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22Acc
 check "count by ip limit 1000" "$result"
 
 echo ""
+echo "=== 7. topo: intraNetCount+count+srcMid+dstMid by srcNode+dstNode+dstPort, filter topoNetwork!=外发 + srcNode/dstNode notEmpty ==="
+# measures: [intraNetCount, count, srcMid, dstMid]
+# dimensions: [srcNode, dstNode, dstPort]
+# filters: topoNetwork notEquals [外发], srcNode notEquals [''], dstNode notEquals ['']
+# limit: 20, segments: org+black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.intraNetCount%22%2C%22AccessView.count%22%2C%22AccessView.srcMid%22%2C%22AccessView.dstMid%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+15+minutes+ago+to+15+minutes+from+now%22%7D%5D%2C%22order%22%3A%7B%22AccessView.count%22%3A%22desc%22%7D%2C%22filters%22%3A%5B%7B%22dimension%22%3A%22AccessView.topoNetwork%22%2C%22operator%22%3A%22notEquals%22%2C%22values%22%3A%5B%22%E5%A4%96%E5%8F%91%22%5D%7D%2C%7B%22member%22%3A%22AccessView.srcNode%22%2C%22operator%22%3A%22notEquals%22%2C%22values%22%3A%5B%22%22%5D%7D%2C%7B%22member%22%3A%22AccessView.dstNode%22%2C%22operator%22%3A%22notEquals%22%2C%22values%22%3A%5B%22%22%5D%7D%5D%2C%22dimensions%22%3A%5B%22AccessView.srcNode%22%2C%22AccessView.dstNode%22%2C%22AccessView.dstPort%22%5D%2C%22limit%22%3A20%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "topo: intraNetCount+count+srcMid+dstMid by srcNode+dstNode+dstPort" "$result"
+
+echo ""
+echo "========================================"
+echo "=== 风险概览查询 ==="
+echo "========================================"
+
+echo ""
+echo "=== 8. 风险汇总指标: count+blockCount+uniqDevCount+uniqIpCount+uniqUserCount (resultScore > 0) ==="
+# measures: [count, blockCount, uniqDevCount, uniqIpCount, uniqUserCount]
+# filter: resultScore gt 0 (dimension 字段), time: 60min, no dimensions
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.count%22%2C%22AccessView.blockCount%22%2C%22AccessView.uniqDevCount%22%2C%22AccessView.uniqIpCount%22%2C%22AccessView.uniqUserCount%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+60+minutes+ago+to+60+minutes+from+now%22%7D%5D%2C%22filters%22%3A%5B%7B%22dimension%22%3A%22AccessView.resultScore%22%2C%22operator%22%3A%22gt%22%2C%22values%22%3A%5B%220%22%5D%7D%5D%2C%22dimensions%22%3A%5B%5D%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "风险汇总指标 (resultScore>0)" "$result"
+
+echo ""
+echo "=== 9. blockCount+riskCount 按分钟时序 (granularity=minute, 60min) ==="
+# measures: [blockCount, riskCount], granularity: minute, no dimensions, no filters
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.blockCount%22%2C%22AccessView.riskCount%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+60+minutes+ago+to+60+minutes+from+now%22%2C%22granularity%22%3A%22minute%22%7D%5D%2C%22filters%22%3A%5B%5D%2C%22dimensions%22%3A%5B%5D%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "blockCount+riskCount 按分钟时序" "$result"
+
+echo ""
+echo "=== 10. AccessView count by risk (risk dimension + arrayJoin) ==="
+# measures: [count], dimensions: [risk], 60min, no filters
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.count%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+60+minutes+ago+to+60+minutes+from+now%22%7D%5D%2C%22filters%22%3A%5B%5D%2C%22dimensions%22%3A%5B%22AccessView.risk%22%5D%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "AccessView count by risk" "$result"
+
+echo ""
+echo "=== 11. EventView count by risk (owasp segment, limit 10) ==="
+# cube: EventView, measures: [count], dimensions: [risk], segments: org+owasp, limit: 10
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22EventView.count%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22EventView.ts%22%2C%22dateRange%22%3A%22from+60+minutes+ago+to+60+minutes+from+now%22%7D%5D%2C%22filters%22%3A%5B%5D%2C%22dimensions%22%3A%5B%22EventView.risk%22%5D%2C%22limit%22%3A10%2C%22segments%22%3A%5B%22EventView.org%22%2C%22EventView.owasp%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "EventView count by risk (owasp segment)" "$result"
+
+echo ""
+echo "========================================"
+echo "=== 风险分析查询 ==="
+echo "========================================"
+
+echo ""
+echo "=== 12. 敏感数据风险: aggSensScore+aggSensKey+aggSensValNum+lastTs, filter aggSensScore>=95 + topoNetwork=公网 + isSens!='' ==="
+# measures: [aggSensScore, aggSensKey, aggSensValNum, lastTs]
+# filter: aggSensScore gte 95, topoNetwork equals 公网, isSens notEquals ''
+# dimensions: [host, method, analysis, ip, ipGeoProvince, ipGeoCity], segments: org+riskNotConfirmed+black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%20%5B%22AccessView.aggSensScore%22%2C%20%22AccessView.aggSensKey%22%2C%20%22AccessView.aggSensValNum%22%2C%20%22AccessView.lastTs%22%5D%2C%20%22timeDimensions%22%3A%20%5B%7B%22dimension%22%3A%20%22AccessView.ts%22%2C%20%22dateRange%22%3A%20%22from%2060%20minutes%20ago%20to%2060%20minutes%20from%20now%22%7D%5D%2C%20%22order%22%3A%20%7B%22AccessView.lastTs%22%3A%20%22desc%22%7D%2C%20%22filters%22%3A%20%5B%7B%22member%22%3A%20%22AccessView.aggSensScore%22%2C%20%22operator%22%3A%20%22gte%22%2C%20%22values%22%3A%20%5B%2295%22%5D%7D%2C%20%7B%22member%22%3A%20%22AccessView.topoNetwork%22%2C%20%22operator%22%3A%20%22equals%22%2C%20%22values%22%3A%20%5B%22%E5%85%AC%E7%BD%91%22%5D%7D%2C%20%7B%22member%22%3A%20%22AccessView.isSens%22%2C%20%22operator%22%3A%20%22notEquals%22%2C%20%22values%22%3A%20%5B%22%22%5D%7D%5D%2C%20%22dimensions%22%3A%20%5B%22AccessView.host%22%2C%20%22AccessView.method%22%2C%20%22AccessView.analysis%22%2C%20%22AccessView.ip%22%2C%20%22AccessView.ipGeoProvince%22%2C%20%22AccessView.ipGeoCity%22%5D%2C%20%22segments%22%3A%20%5B%22AccessView.org%22%2C%20%22AccessView.riskNotConfirmed%22%2C%20%22AccessView.black%22%5D%2C%20%22timezone%22%3A%20%22Asia%2FShanghai%22%7D")
+check "敏感数据风险: aggSensScore+aggSensKey+aggSensValNum+lastTs" "$result"
+
+echo ""
+echo "=== 13. 综合风险: aggScore+aggRisk+count+lastTs, filter aggScore>=95 + topoNetwork=公网 ==="
+# measures: [aggScore, aggRisk, count, lastTs]
+# filter: aggScore gte 95, topoNetwork equals 公网
+# dimensions: [host, method, analysis, ip, ipGeoProvince, ipGeoCity], segments: org+riskNotConfirmed+black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%20%5B%22AccessView.aggScore%22%2C%20%22AccessView.aggRisk%22%2C%20%22AccessView.count%22%2C%20%22AccessView.lastTs%22%5D%2C%20%22timeDimensions%22%3A%20%5B%7B%22dimension%22%3A%20%22AccessView.ts%22%2C%20%22dateRange%22%3A%20%22from%2060%20minutes%20ago%20to%2060%20minutes%20from%20now%22%7D%5D%2C%20%22order%22%3A%20%7B%22AccessView.lastTs%22%3A%20%22desc%22%7D%2C%20%22filters%22%3A%20%5B%7B%22member%22%3A%20%22AccessView.aggScore%22%2C%20%22operator%22%3A%20%22gte%22%2C%20%22values%22%3A%20%5B%2295%22%5D%7D%2C%20%7B%22member%22%3A%20%22AccessView.topoNetwork%22%2C%20%22operator%22%3A%20%22equals%22%2C%20%22values%22%3A%20%5B%22%E5%85%AC%E7%BD%91%22%5D%7D%5D%2C%20%22dimensions%22%3A%20%5B%22AccessView.host%22%2C%20%22AccessView.method%22%2C%20%22AccessView.analysis%22%2C%20%22AccessView.ip%22%2C%20%22AccessView.ipGeoProvince%22%2C%20%22AccessView.ipGeoCity%22%5D%2C%20%22segments%22%3A%20%5B%22AccessView.org%22%2C%20%22AccessView.riskNotConfirmed%22%2C%20%22AccessView.black%22%5D%2C%20%22timezone%22%3A%20%22Asia%2FShanghai%22%7D")
+check "综合风险: aggScore+aggRisk+count+lastTs" "$result"
+
+echo ""
+echo "=== 14. 弱点风险: aggWeakScore+aggWeakKey+lastTs, filter aggWeakScore>=95 + topoNetwork=公网 + weakKey set ==="
+# measures: [aggWeakScore, aggWeakKey, lastTs]
+# filter: aggWeakScore gte 95, topoNetwork equals 公网, weakKey set (notEmpty)
+# dimensions: [host, method, analysis, ip, ipGeoProvince, ipGeoCity], segments: org+riskNotConfirmed+black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%20%5B%22AccessView.aggWeakScore%22%2C%20%22AccessView.aggWeakKey%22%2C%20%22AccessView.lastTs%22%5D%2C%20%22timeDimensions%22%3A%20%5B%7B%22dimension%22%3A%20%22AccessView.ts%22%2C%20%22dateRange%22%3A%20%22from%2060%20minutes%20ago%20to%2060%20minutes%20from%20now%22%7D%5D%2C%20%22order%22%3A%20%7B%22AccessView.lastTs%22%3A%20%22desc%22%7D%2C%20%22filters%22%3A%20%5B%7B%22member%22%3A%20%22AccessView.aggWeakScore%22%2C%20%22operator%22%3A%20%22gte%22%2C%20%22values%22%3A%20%5B%2295%22%5D%7D%2C%20%7B%22member%22%3A%20%22AccessView.topoNetwork%22%2C%20%22operator%22%3A%20%22equals%22%2C%20%22values%22%3A%20%5B%22%E5%85%AC%E7%BD%91%22%5D%7D%2C%20%7B%22member%22%3A%20%22AccessView.weakKey%22%2C%20%22operator%22%3A%20%22set%22%7D%5D%2C%20%22dimensions%22%3A%20%5B%22AccessView.host%22%2C%20%22AccessView.method%22%2C%20%22AccessView.analysis%22%2C%20%22AccessView.ip%22%2C%20%22AccessView.ipGeoProvince%22%2C%20%22AccessView.ipGeoCity%22%5D%2C%20%22segments%22%3A%20%5B%22AccessView.org%22%2C%20%22AccessView.riskNotConfirmed%22%2C%20%22AccessView.black%22%5D%2C%20%22timezone%22%3A%20%22Asia%2FShanghai%22%7D")
+check "弱点风险: aggWeakScore+aggWeakKey+lastTs" "$result"
+
+echo ""
 echo "--- $pass passed, $fail failed ---"
 
 echo ""
