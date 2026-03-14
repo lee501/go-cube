@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/Servicewall/go-cube/config"
 )
@@ -11,13 +12,18 @@ import (
 var defaultHandler *Handler
 
 // Init initializes the global Handler with the given ClickHouse connection parameters.
-func Init(hosts []string, database, username, password string) error {
-	h, err := New(&config.ClickHouseConfig{
+// An optional queryTimeout can be provided; defaults to 30s if zero or omitted.
+func Init(hosts []string, database, username, password string, queryTimeout ...time.Duration) error {
+	cfg := &config.ClickHouseConfig{
 		Hosts:    hosts,
 		Database: database,
 		Username: username,
 		Password: password,
-	})
+	}
+	if len(queryTimeout) > 0 && queryTimeout[0] > 0 {
+		cfg.QueryTimeout = queryTimeout[0]
+	}
+	h, err := New(cfg)
 	if err != nil {
 		return err
 	}

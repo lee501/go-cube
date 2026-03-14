@@ -16,8 +16,9 @@ import (
 )
 
 type Handler struct {
-	modelLoader *model.Loader
-	chClient    *sql.Client
+	modelLoader  *model.Loader
+	chClient     *sql.Client
+	queryTimeout time.Duration
 }
 
 // New 使用 ClickHouse 配置和内置模型创建 Handler，是最常见场景的便利构造函数。
@@ -26,7 +27,13 @@ func New(cfg *config.ClickHouseConfig) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewHandler(model.NewLoader(model.InternalFS), chClient), nil
+	queryTimeout := cfg.QueryTimeout
+	if queryTimeout == 0 {
+		queryTimeout = 30 * time.Second
+	}
+	h := NewHandler(model.NewLoader(model.InternalFS), chClient)
+	h.queryTimeout = queryTimeout
+	return h, nil
 }
 
 // NewHandler 使用外部提供的 modelLoader 和 chClient 创建 Handler，适合自定义模型或测试场景。
@@ -69,7 +76,11 @@ func (h *Handler) Query(ctx context.Context, req *QueryRequest) (*QueryResponse,
 
 // HandleLoad 是 HTTP 入口，供注册到路由器使用。
 func (h *Handler) HandleLoad(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	timeout := h.queryTimeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
 	var body []byte
