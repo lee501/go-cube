@@ -42,7 +42,7 @@ func (h *Handler) Query(ctx context.Context, req *QueryRequest) (*QueryResponse,
 
 	modelName := extractModelNameFromRequest(req)
 	if modelName == "" {
-		return nil, errorf("无法从查询中确定模型")
+		return nil, fmt.Errorf("无法从查询中确定模型")
 	}
 
 	m, err := h.modelLoader.Load(modelName)
@@ -152,8 +152,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
-}
-
-func errorf(format string, args ...any) error {
-	return fmt.Errorf(format, args...)
 }
