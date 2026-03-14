@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Servicewall/go-cube/config"
 	"github.com/Servicewall/go-cube/model"
 	"github.com/Servicewall/go-cube/sql"
 )
@@ -19,54 +20,29 @@ type Handler struct {
 	chClient    *sql.Client
 }
 
+// New 使用 ClickHouse 配置和内置模型创建 Handler，是最常见场景的便利构造函数。
+func New(cfg *config.ClickHouseConfig) (*Handler, error) {
+	chClient, err := sql.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewHandler(model.NewLoader(model.InternalFS), chClient), nil
+}
+
+// NewHandler 使用外部提供的 modelLoader 和 chClient 创建 Handler，适合自定义模型或测试场景。
 func NewHandler(modelLoader *model.Loader, chClient *sql.Client) *Handler {
 	return &Handler{modelLoader: modelLoader, chClient: chClient}
 }
 
-func (h *Handler) HandleLoad(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-
-	var body []byte
-	if r.Method == http.MethodPost {
-		body, _ = io.ReadAll(r.Body)
-	} else {
-		body = []byte(r.URL.Query().Get("query"))
-	}
-
-	resp, err := h.load(ctx, body)
-	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (h *Handler) load(ctx context.Context, body []byte) (*QueryResponse, error) {
-	if m := map[string]json.RawMessage{}; json.Unmarshal(body, &m) == nil && m["query"] != nil {
-		body = m["query"]
-	}
-	var req QueryRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+// Query 执行一次 cube 查询，接受结构体，是库调用的首选入口。
+func (h *Handler) Query(ctx context.Context, req *QueryRequest) (*QueryResponse, error) {
+	if err := validateQuery(req); err != nil {
 		return nil, err
 	}
 
-	if err := validateQuery(&req); err != nil {
-		return nil, err
-	}
-
-	modelName := ""
-	if len(req.Dimensions) > 0 {
-		modelName = extractModelName(req.Dimensions[0])
-	} else if len(req.Measures) > 0 {
-		modelName = extractModelName(req.Measures[0])
-	} else if len(req.Filters) > 0 {
-		modelName = extractModelName(filterMember(req.Filters[0]))
-	}
+	modelName := extractModelNameFromRequest(req)
 	if modelName == "" {
-		return nil, fmt.Errorf("无法从查询中确定模型")
+		return nil, errorf("无法从查询中确定模型")
 	}
 
 	m, err := h.modelLoader.Load(modelName)
@@ -74,7 +50,7 @@ func (h *Handler) load(ctx context.Context, body []byte) (*QueryResponse, error)
 		return nil, err
 	}
 
-	query, params, err := BuildQuery(&req, m)
+	query, params, err := BuildQuery(req, m)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +63,79 @@ func (h *Handler) load(ctx context.Context, body []byte) (*QueryResponse, error)
 
 	return &QueryResponse{
 		QueryType: "regularQuery",
-		Results:   []QueryResult{{Query: req, Data: data}},
+		Results:   []QueryResult{{Query: *req, Data: data}},
 	}, nil
+}
+
+// Load 执行一次 cube 查询，接受 JSON 字节，保持向后兼容。
+func (h *Handler) Load(ctx context.Context, body []byte) (*QueryResponse, error) {
+	req, err := parseQueryRequest(body)
+	if err != nil {
+		return nil, err
+	}
+	return h.Query(ctx, req)
+}
+
+// HandleLoad 是 HTTP 入口，供注册到路由器使用。
+func (h *Handler) HandleLoad(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	var body []byte
+	if r.Method == http.MethodPost {
+		body, _ = io.ReadAll(r.Body)
+	} else {
+		body = []byte(r.URL.Query().Get("query"))
+	}
+
+	req, err := parseQueryRequest(body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.Query(ctx, req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := h.chClient.Ping(ctx); err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// parseQueryRequest 从 JSON 字节解析出 QueryRequest。
+// 支持两种格式：直接的 QueryRequest JSON，或包含 "query" 键的包装对象。
+func parseQueryRequest(body []byte) (*QueryRequest, error) {
+	if m := map[string]json.RawMessage{}; json.Unmarshal(body, &m) == nil && m["query"] != nil {
+		body = m["query"]
+	}
+	var req QueryRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+func extractModelNameFromRequest(req *QueryRequest) string {
+	if len(req.Dimensions) > 0 {
+		return extractModelName(req.Dimensions[0])
+	}
+	if len(req.Measures) > 0 {
+		return extractModelName(req.Measures[0])
+	}
+	if len(req.Filters) > 0 {
+		return extractModelName(filterMember(req.Filters[0]))
+	}
+	return ""
 }
 
 func extractModelName(field string) string {
@@ -97,7 +144,7 @@ func extractModelName(field string) string {
 }
 
 // filterMember 返回 filter 的 Member 字段；
-// 若为 OR 复合条件则遍历子条件，返回第一个非空的 Member（递归处理嵌套 OR）。
+// 若为 OR 复合条件则遍历子条件，返回第一个非空的 Member。
 func filterMember(f Filter) string {
 	if f.Member != "" {
 		return f.Member
@@ -110,19 +157,12 @@ func filterMember(f Filter) string {
 	return ""
 }
 
-// Load 执行一次 cube 查询，供作为库使用时直接调用（无需 HTTP 层）。
-// query 可以是 JSON 编码的 QueryRequest，也可以是包含 "query" 键的 JSON 对象。
-func (h *Handler) Load(ctx context.Context, query []byte) (*QueryResponse, error) {
-	return h.load(ctx, query)
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
 }
 
-func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	if err := h.chClient.Ping(ctx); err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+func errorf(format string, args ...any) error {
+	return fmt.Errorf(format, args...)
 }
