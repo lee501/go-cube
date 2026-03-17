@@ -1,6 +1,6 @@
 cube:
   name: RiskView
-  sql: "SELECT * FROM default.risk_day"
+  sql_table: default.risk_day
 
   segments:
     org:
