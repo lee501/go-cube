@@ -110,7 +110,7 @@ func splitMemberName(s string) (string, string, string) {
 
 // granularityFunc 将 CubeJS granularity 映射到 ClickHouse 截断函数名
 var granularityFunc = map[string]string{
-	"second":  "toStartOfSecond",
+	"second":  "toDateTime",
 	"minute":  "toStartOfMinute",
 	"hour":    "toStartOfHour",
 	"day":     "toStartOfDay",
@@ -136,12 +136,12 @@ func BuildQuery(req *QueryRequest, cube *model.Cube) (string, []interface{}, err
 		if td.Granularity == "" {
 			continue
 		}
-		fn, ok := granularityFunc[td.Granularity]
+		_, fieldName, subKey := splitMemberName(td.Dimension)
+		field, ok := cube.GetField(fieldName, subKey)
 		if !ok {
 			continue
 		}
-		_, fieldName, subKey := splitMemberName(td.Dimension)
-		field, ok := cube.GetField(fieldName, subKey)
+		fn, ok := granularityFunc[td.Granularity]
 		if !ok {
 			continue
 		}
