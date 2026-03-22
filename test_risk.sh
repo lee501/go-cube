@@ -27,10 +27,14 @@ check() {
     fi
 }
 
+echo "Killing any leftover go-cube processes..."
+pkill -f go-cube 2>/dev/null
+sleep 1
+
 echo "Starting go-cube server in background..."
 ./go-cube &
 SERVER_PID=$!
-sleep 2
+sleep 3
 
 echo ""
 echo "Testing health endpoint..."
