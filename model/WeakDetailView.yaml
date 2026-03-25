@@ -39,27 +39,27 @@ cube:
       title: 检测弱点
 
     evidence:
-      sql: weak_data.2[1]
+      sql: weak_data.2
       type: string
       title: 弱点证据
 
     reqDefectKey:
-      sql: weak_data.2[2]
+      sql: "if(weak_name in ('参数可遍历'), weak_data.2, [])"
       type: string
       title: 请求侧弱点数据的路径
 
     resDefectKey:
-      sql: weak_data.2[2]
+      sql: "[]"
       type: string
       title: 响应侧弱点数据的路径
 
     reqDefectVal:
-      sql: weak_data.2[2]
+      sql: "if(weak_name in ('参数可遍历','返回带有明文密码','返回编码不一致','返回敏感信息未加密','无鉴权返回敏感信息','返回指纹信息泄露','返回服务器信息泄露'), [], weak_data.2)"
       type: string
       title: 请求侧弱点数据的值
 
     resDefectVal:
-      sql: weak_data.2[2]
+      sql: "if(weak_name in ('参数可遍历','基本认证','GET请求传输密码','请求带有明文密码','请求编码不一致','请求敏感信息未加密','不推荐的HTTP方法','XSS注入漏洞','XSS注入漏扫','SQL注入漏洞','SQL注入漏扫','Shell命令注入','Webshell','SSRF'), [], weak_data.2)"
       type: string
       title: 响应侧弱点数据的值
 
