@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test UserAuthView and ApiParamView queries against local go-cube server
+# Test UserAuthView, ApiParamView and ApiBodyView queries against local go-cube server
 # Mirrors production curl requests from demo.servicewall.cn
 
 BASE="http://localhost:4000"
