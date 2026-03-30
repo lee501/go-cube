@@ -1,6 +1,7 @@
 cube:
   name: PromptView
   sql_table: default.prompt
+  prewhere: true
 
   segments:
     org:

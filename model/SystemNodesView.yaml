@@ -1,6 +1,7 @@
 cube:
   name: SystemNodesView
   sql_table: default.system_nodes
+  prewhere: true
 
   segments:
     org:

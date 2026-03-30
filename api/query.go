@@ -247,7 +247,13 @@ func BuildQuery(req *QueryRequest, cube *model.Cube) (string, []interface{}, err
 		return tmpl
 	}
 
-	// segments 全部走 PREWHERE，applyVars 返回空串时跳过
+	// 判断是否支持 PREWHERE
+	// PREWHERE 仅适用于纯 ClickHouse MergeTree 引擎表，
+	// 涉及 PostgreSQL 外部表（sql_table 或子查询 JOIN）时不可用。
+	// 需要在 YAML 中显式声明 prewhere: true 才启用。
+	usePrewhere := cube.Prewhere
+
+	// segments
 	for _, seg := range req.Segments {
 		_, segName, _ := splitMemberName(seg)
 		s, ok := cube.Segments[segName]
@@ -255,7 +261,11 @@ func BuildQuery(req *QueryRequest, cube *model.Cube) (string, []interface{}, err
 			continue
 		}
 		if result := applyVars(s.SQL); result != "" {
-			prewhere = append(prewhere, result)
+			if usePrewhere {
+				prewhere = append(prewhere, result)
+			} else {
+				where = append(where, result)
+			}
 		}
 	}
 
@@ -319,11 +329,13 @@ func BuildQuery(req *QueryRequest, cube *model.Cube) (string, []interface{}, err
 		if clause, p := buildTimeDimensionClause(field.SQL, td.DateRange); clause != "" {
 			where = append(where, clause)
 			whereParams = append(whereParams, p...)
-			// 同步替换子查询中的占位符（使用原始列名而非 dimension SQL 表达式）
+			// 同步替换子查询中的占位符
 			placeholder := "{filter." + fieldName + "}"
 			if strings.Contains(fromSQL, placeholder) {
-				subClause, _ := buildTimeDimensionClause(fieldName, td.DateRange)
+				subClause, subParams := buildTimeDimensionClause(fieldName, td.DateRange)
 				fromSQL = strings.ReplaceAll(fromSQL, placeholder, subClause)
+				// ★ 子查询参数必须插到 params 最前面，因为 SQL 中子查询先出现
+				whereParams = append(subParams, whereParams...)
 			}
 		}
 	}
@@ -372,26 +384,42 @@ func BuildQuery(req *QueryRequest, cube *model.Cube) (string, []interface{}, err
 	params = append(whereParams, havingParams...)
 
 	// ORDER BY
+	// 构建 SELECT 中已有的字段集合，用于判断 ORDER BY 是否可引用别名
+	selectFields := make(map[string]bool)
+	for _, name := range req.Dimensions {
+		selectFields[name] = true
+	}
+	for _, name := range req.Measures {
+		selectFields[name] = true
+	}
+
 	// 如果显式指定了排序，按请求排序；否则若存在带粒度的时间维度，隐式升序（兼容 CubeJS 默认行为）
 	if len(req.Order) > 0 {
-		sql.WriteString(" ORDER BY ")
-		for i, item := range req.Order {
-			if i > 0 {
-				sql.WriteString(", ")
-			}
+		var orderClauses []string
+		for _, item := range req.Order {
+			var col string
 			if gc, ok := granByDim[item.Member]; ok {
-				sql.WriteString(gc.expr)
+				col = gc.expr
+			} else if selectFields[item.Member] {
+				// 字段在 SELECT 中有别名，直接引用别名
+				col = fmt.Sprintf("\"%s\"", item.Member)
 			} else {
 				_, fieldName, subKey := splitMemberName(item.Member)
 				if f, ok := cube.GetField(fieldName, subKey); ok {
-					sql.WriteString(f.SQL)
+					col = f.SQL
 				} else {
-					sql.WriteString(item.Member)
+					// 字段不存在，跳过避免生成非法 SQL
+					continue
 				}
 			}
 			if item.Direction == "desc" {
-				sql.WriteString(" DESC")
+				col += " DESC"
 			}
+			orderClauses = append(orderClauses, col)
+		}
+		if len(orderClauses) > 0 {
+			sql.WriteString(" ORDER BY ")
+			sql.WriteString(strings.Join(orderClauses, ", "))
 		}
 	} else if len(granByDim) > 0 {
 		// 隐式排序：取第一个带粒度的时间维度，按 timeDimensions 顺序确定

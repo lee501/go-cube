@@ -1,6 +1,7 @@
 cube:
   name: AiWeakAnalysisView
   sql_table: ai_analysis
+  prewhere: true
 
   segments:
     org:

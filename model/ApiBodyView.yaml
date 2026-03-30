@@ -1,6 +1,7 @@
 cube:
   name: ApiBodyView
   sql_table: default.access_sample_raw
+  prewhere: true
 
   segments:
     org:

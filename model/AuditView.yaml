@@ -1,6 +1,7 @@
 cube:
   name: AuditView
   sql_table: default.audit
+  prewhere: true
 
   segments:
     org:

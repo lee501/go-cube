@@ -1,6 +1,7 @@
 cube:
   name: AccessRawView
   sql_table: default.access_raw_local
+  prewhere: true
 
   segments:
     org:

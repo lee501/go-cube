@@ -1,6 +1,7 @@
 cube:
   name: AccessView
   sql_table: default.access
+  prewhere: true
 
   dimensions:
     id:

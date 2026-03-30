@@ -6,6 +6,7 @@ type Cube struct {
 	Name       string               `yaml:"name"`
 	SQL        string               `yaml:"sql"`
 	SQLTable   string               `yaml:"sql_table"`
+	Prewhere   bool                 `yaml:"prewhere,omitempty"`
 	Dimensions map[string]Dimension `yaml:"dimensions"`
 	Measures   map[string]Measure   `yaml:"measures"`
 	Segments   map[string]Segment   `yaml:"segments,omitempty"`
