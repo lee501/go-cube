@@ -27,7 +27,8 @@ type Measure struct {
 }
 
 type Segment struct {
-	SQL string `yaml:"sql"`
+	SQL   string `yaml:"sql"`
+	Title string `yaml:"title,omitempty"`
 }
 
 // GetField 查找维度或度量字段，subKey 非空时将 SQL 模板中的 {key} 替换为 subKey。
