@@ -140,6 +140,40 @@ check "status+sumCount+score+countNum+ts+resSensTs (multi risk detail)" "$result
 
 
 echo ""
+echo "========================================"
+echo "=== RiskView: X-Sw-Org header segment tests ==="
+echo "=== 验证 org/whiteFilter segment SQL 被正确下推到 PREWHERE ==="
+echo "========================================"
+
+ORG_HDR="-H 'X-Sw-Org: testorg'"
+
+echo ""
+echo "=== 13. 带 org header: 汇总统计 (segments: org+whiteFilter+whiteRiskFilter+riskDenoiseFilter) ==="
+# org segment → PREWHERE org = 'testorg'
+# whiteFilter segment → PREWHERE arrayStringConcat... not in (... and org = 'testorg')
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22ungrouped%22%3Atrue%2C%22measures%22%3A%5B%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22RiskView.filterTs%22%2C%22dateRange%22%3A%22today%22%7D%5D%2C%22filters%22%3A%5B%5D%2C%22dimensions%22%3A%5B%22RiskView.total%22%2C%22RiskView.levelCount%22%2C%22RiskView.statusCount%22%2C%22RiskView.showTimeCount%22%2C%22RiskView.tagsCount%22%5D%2C%22segments%22%3A%5B%22RiskView.org%22%2C%22RiskView.whiteFilter%22%2C%22RiskView.whiteRiskFilter%22%2C%22RiskView.riskDenoiseFilter%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D" \
+  -H "X-Sw-Org: testorg")
+check "with org header: summary stats (org+whiteFilter+whiteRiskFilter+riskDenoiseFilter)" "$result"
+
+echo ""
+echo "=== 14. 带 org header: 忽略计数 (segments: org+whiteRiskFilter+riskDenoiseFilter) ==="
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22ungrouped%22%3Atrue%2C%22measures%22%3A%5B%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22RiskView.filterTs%22%2C%22dateRange%22%3A%22today%22%7D%5D%2C%22filters%22%3A%5B%5D%2C%22dimensions%22%3A%5B%22RiskView.ignoreCount%22%5D%2C%22segments%22%3A%5B%22RiskView.org%22%2C%22RiskView.whiteRiskFilter%22%2C%22RiskView.riskDenoiseFilter%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D" \
+  -H "X-Sw-Org: testorg")
+check "with org header: ignoreCount (org+whiteRiskFilter+riskDenoiseFilter)" "$result"
+
+echo ""
+echo "=== 15. 带 org header: 风险计数 (measure: count, filters: filterStatus+filterRiskLevel, segments: org+whiteFilter+whiteRiskFilter+riskDenoiseFilter) ==="
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22RiskView.count%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22RiskView.filterTs%22%2C%22dateRange%22%3A%22today%22%7D%5D%2C%22filters%22%3A%5B%7B%22member%22%3A%22RiskView.filterStatus%22%2C%22operator%22%3A%22contains%22%2C%22values%22%3A%5B%22%E5%BE%85%E7%A1%AE%E8%AE%A4%22%5D%7D%2C%7B%22member%22%3A%22RiskView.filterRiskLevel%22%2C%22operator%22%3A%22contains%22%2C%22values%22%3A%5B%22%E9%AB%98%E9%A3%8E%E9%99%A9%22%2C%22%E4%B8%AD%E9%A3%8E%E9%99%A9%22%5D%7D%5D%2C%22dimensions%22%3A%5B%5D%2C%22segments%22%3A%5B%22RiskView.org%22%2C%22RiskView.whiteFilter%22%2C%22RiskView.whiteRiskFilter%22%2C%22RiskView.riskDenoiseFilter%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D" \
+  -H "X-Sw-Org: testorg")
+check "with org header: risk count (org+whiteFilter segments, filterStatus+filterRiskLevel filters)" "$result"
+
+echo ""
+echo "=== 16. 带 org header: 风险列表 (measures+dims, order filterScore/ts desc, limit 20, all segments) ==="
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22RiskView.ts%22%2C%22RiskView.firstTs%22%2C%22RiskView.status%22%2C%22RiskView.data%22%2C%22RiskView.riskClues%22%2C%22RiskView.isRealtimeRule%22%2C%22RiskView.filters%22%2C%22RiskView.orderBy%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22RiskView.filterTs%22%2C%22dateRange%22%3A%22today%22%7D%5D%2C%22order%22%3A%5B%5B%22RiskView.filterScore%22%2C%22desc%22%5D%2C%5B%22RiskView.ts%22%2C%22desc%22%5D%5D%2C%22filters%22%3A%5B%7B%22member%22%3A%22RiskView.filterStatus%22%2C%22operator%22%3A%22contains%22%2C%22values%22%3A%5B%22%E5%BE%85%E7%A1%AE%E8%AE%A4%22%5D%7D%2C%7B%22member%22%3A%22RiskView.filterRiskLevel%22%2C%22operator%22%3A%22contains%22%2C%22values%22%3A%5B%22%E9%AB%98%E9%A3%8E%E9%99%A9%22%2C%22%E4%B8%AD%E9%A3%8E%E9%99%A9%22%5D%7D%5D%2C%22dimensions%22%3A%5B%22RiskView.risk%22%2C%22RiskView.host%22%2C%22RiskView.channel%22%2C%22RiskView.filterRiskLevel%22%2C%22RiskView.type%22%2C%22RiskView.content%22%2C%22RiskView.filterScore%22%2C%22RiskView.nameGroup%22%5D%2C%22limit%22%3A20%2C%22offset%22%3A0%2C%22segments%22%3A%5B%22RiskView.org%22%2C%22RiskView.whiteFilter%22%2C%22RiskView.whiteRiskFilter%22%2C%22RiskView.riskDenoiseFilter%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D" \
+  -H "X-Sw-Org: testorg")
+check "with org header: risk list (all segments, order filterScore+ts desc, limit 20)" "$result"
+
+echo ""
 echo "Test completed: $pass passed, $fail failed."
 
 kill $SERVER_PID 2>/dev/null
