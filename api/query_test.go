@@ -1066,3 +1066,113 @@ func TestOrderList_UnmarshalJSON_SkipsEmptyMember_Object(t *testing.T) {
 		t.Errorf("expected 1 item with Member=AccessView.ts, got: %+v", ol)
 	}
 }
+
+// riskCube builds a RiskView fixture mirroring model/RiskView.yaml new fields.
+func riskCube() *model.Cube {
+	filterStatusSQL := "multiIf(arrayStringConcat([risk,host,content],',') not in (select filter from postgres.risk_aggs where filter_type = 4 and org = '')=0, '始终忽略', arrayStringConcat([risk,host,content],',') in (select filter from postgres.risk_aggs where filter_type = 1 and org = ''), '已确认', '待确认')"
+	return &model.Cube{
+		Name:     "RiskView",
+		SQLTable: "default.risk_day",
+		Dimensions: map[string]model.Dimension{
+			"risk":            {SQL: "risk", Type: "string"},
+			"host":            {SQL: "host", Type: "string"},
+			"filterRiskLevel": {SQL: "multiIf(dictGetInt64('default.risk_dict', 'score', risk)=80, '高风险', dictGetInt64('default.risk_dict', 'score', risk)=50, '中风险', '低风险')", Type: "string"},
+			"filterStatus":    {SQL: filterStatusSQL, Type: "string"},
+			"filterShowTime":  {SQL: "if(first_ts >= today(), '首次出现', '重复出现')", Type: "string"},
+			"filterTs":        {SQL: "ts", Type: "time"},
+		},
+		Measures: map[string]model.Measure{
+			"count":              {SQL: "count()", Type: "number"},
+			"ts":                 {SQL: "max(ts)", Type: "time"},
+			"listFilterShowTime": {SQL: "if(min(first_ts) >= today(), '首次出现', '重复出现')", Type: "string"},
+		},
+		Segments: map[string]model.Segment{
+			"org":               {SQL: "org = {vars.org}"},
+			"whiteFilter":       {SQL: "arrayStringConcat([risk,host,content],',') not in (select filter from postgres.risk_aggs where filter_type = 4 and org = {vars.org})"},
+			"whiteRiskFilter":   {SQL: "risk not in (select tag from risk_dict where score <= 0)"},
+			"riskDenoiseFilter": {SQL: "risk in (select risk from risk_agg_local final where ts > today() group by risk having count() < 100)"},
+			"statusFilter":      {SQL: filterStatusSQL + " = '待确认'"},
+		},
+	}
+}
+
+// TestRiskView_FilterShowTime_WHERE verifies filterShowTime (dimension) produces a WHERE clause.
+func TestRiskView_FilterShowTime_WHERE(t *testing.T) {
+	req := &QueryRequest{
+		Measures: []string{"RiskView.count"},
+		Filters: []Filter{
+			{Member: "RiskView.filterShowTime", Operator: "equals", Values: []interface{}{"重复出现"}},
+			{Member: "RiskView.filterRiskLevel", Operator: "equals", Values: []interface{}{"高风险", "中风险"}},
+		},
+		Segments: []string{"RiskView.org", "RiskView.whiteFilter", "RiskView.whiteRiskFilter", "RiskView.riskDenoiseFilter", "RiskView.statusFilter"},
+		Limit:    20,
+		Vars:     map[string][]string{"org": {"testorg"}},
+	}
+	sql, _, err := BuildQuery(req, riskCube())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// filterShowTime is a dimension → WHERE
+	if !contains(sql, "WHERE") {
+		t.Errorf("expected WHERE clause, got: %s", sql)
+	}
+	if !contains(sql, "PREWHERE") {
+		t.Errorf("expected PREWHERE (segments), got: %s", sql)
+	}
+	if !contains(sql, "first_ts >= today()") {
+		t.Errorf("expected filterShowTime SQL in WHERE, got: %s", sql)
+	}
+	// statusFilter segment → PREWHERE
+	if !contains(sql, "'待确认'") {
+		t.Errorf("expected statusFilter SQL in PREWHERE, got: %s", sql)
+	}
+}
+
+// TestRiskView_ListFilterShowTime_HAVING verifies listFilterShowTime (measure) produces a HAVING clause.
+func TestRiskView_ListFilterShowTime_HAVING(t *testing.T) {
+	req := &QueryRequest{
+		Measures:   []string{"RiskView.ts"},
+		Dimensions: []string{"RiskView.risk", "RiskView.host"},
+		Filters: []Filter{
+			{Member: "RiskView.listFilterShowTime", Operator: "equals", Values: []interface{}{"重复出现"}},
+			{Member: "RiskView.filterRiskLevel", Operator: "equals", Values: []interface{}{"高风险", "中风险"}},
+		},
+		Segments: []string{"RiskView.org", "RiskView.whiteFilter", "RiskView.whiteRiskFilter", "RiskView.riskDenoiseFilter", "RiskView.statusFilter"},
+		Limit:    20,
+		Vars:     map[string][]string{"org": {"testorg"}},
+	}
+	sql, _, err := BuildQuery(req, riskCube())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// listFilterShowTime is a measure → HAVING
+	if !contains(sql, "HAVING") {
+		t.Errorf("expected HAVING clause, got: %s", sql)
+	}
+	if !contains(sql, "min(first_ts) >= today()") {
+		t.Errorf("expected listFilterShowTime SQL in HAVING, got: %s", sql)
+	}
+	// filterRiskLevel is a dimension → WHERE
+	if !contains(sql, "WHERE") {
+		t.Errorf("expected WHERE clause for filterRiskLevel, got: %s", sql)
+	}
+}
+
+// TestRiskView_StatusFilter_Segment verifies statusFilter segment goes to PREWHERE.
+func TestRiskView_StatusFilter_Segment(t *testing.T) {
+	req := &QueryRequest{
+		Measures: []string{"RiskView.count"},
+		Segments: []string{"RiskView.statusFilter"},
+		Limit:    10,
+	}
+	sql, _, err := BuildQuery(req, riskCube())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !contains(sql, "PREWHERE") {
+		t.Errorf("expected PREWHERE for statusFilter segment, got: %s", sql)
+	}
+	if !contains(sql, "'待确认'") {
+		t.Errorf("expected statusFilter SQL in PREWHERE, got: %s", sql)
+	}
+}

@@ -15,6 +15,9 @@ cube:
     riskDenoiseFilter:
       sql: risk in ( select risk from risk_agg_local final where ts > today() group by risk having count() < 100 )
 
+    statusFilter:
+      sql: multiIf(arrayStringConcat([risk,host,content],',') not in (select filter from postgres.risk_aggs where filter_type = 4 and org = '')=0, '始终忽略', arrayStringConcat([risk,host,content],',') in (select filter from postgres.risk_aggs where filter_type = 1 and org = ''), '已确认', '待确认') = '待确认'
+
   dimensions:
     filterTs:
       sql: ts
