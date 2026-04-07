@@ -546,6 +546,29 @@ result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22ungrouped%22%3Atrue%2C%
 check "ungrouped reqSampleKey+respSampleKey+reqSampleValue+respSampleValue limit 5" "$result"
 
 echo ""
+echo "========================================"
+echo "=== AccessView: fileCount by fileMd5 + fileDirection filter ==="
+echo "========================================"
+
+echo ""
+echo "=== 71. fileCount by hour, filter fileMd5=28d89a2b8f464a16b3b6e77ea833b981 + fileDirection=下载, no dimensions ==="
+# measures: fileCount
+# timeDimensions: ts, dateRange: from 7 days ago to now, granularity: hour
+# filters: fileMd5 equals [28d89a2b8f464a16b3b6e77ea833b981], fileDirection equals [下载]
+# dimensions: [], segments: org, black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.fileCount%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+7+days+ago+to+now%22%2C%22granularity%22%3A%22hour%22%7D%5D%2C%22filters%22%3A%5B%7B%22member%22%3A%22AccessView.fileMd5%22%2C%22operator%22%3A%22equals%22%2C%22values%22%3A%5B%2228d89a2b8f464a16b3b6e77ea833b981%22%5D%7D%2C%7B%22member%22%3A%22AccessView.fileDirection%22%2C%22operator%22%3A%22equals%22%2C%22values%22%3A%5B%22%E4%B8%8B%E8%BD%BD%22%5D%7D%5D%2C%22dimensions%22%3A%5B%5D%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "fileCount by hour (fileMd5=28d89a2b8f464a16b3b6e77ea833b981, fileDirection=下载)" "$result"
+
+echo ""
+echo "=== 72. fileCount by channel+host+method+url+urlRoute+fileDirection, order desc, filter fileMd5=28d89a2b8f464a16b3b6e77ea833b981 + fileDirection=下载 ==="
+# measures: fileCount
+# timeDimensions: ts, dateRange: from 7 days ago to now (no granularity)
+# order: [[fileCount, desc]]
+# filters: fileMd5 equals [28d89a2b8f464a16b3b6e77ea833b981], fileDirection equals [下载]
+# dimensions: [channel, host, method, url, urlRoute, fileDirection], segments: org, black
+result=$(curl -s "$BASE/load?queryType=multi&query=%7B%22measures%22%3A%5B%22AccessView.fileCount%22%5D%2C%22timeDimensions%22%3A%5B%7B%22dimension%22%3A%22AccessView.ts%22%2C%22dateRange%22%3A%22from+7+days+ago+to+now%22%7D%5D%2C%22order%22%3A%5B%5B%22AccessView.fileCount%22%2C%22desc%22%5D%5D%2C%22filters%22%3A%5B%7B%22member%22%3A%22AccessView.fileMd5%22%2C%22operator%22%3A%22equals%22%2C%22values%22%3A%5B%2228d89a2b8f464a16b3b6e77ea833b981%22%5D%7D%2C%7B%22member%22%3A%22AccessView.fileDirection%22%2C%22operator%22%3A%22equals%22%2C%22values%22%3A%5B%22%E4%B8%8B%E8%BD%BD%22%5D%7D%5D%2C%22dimensions%22%3A%5B%22AccessView.channel%22%2C%22AccessView.host%22%2C%22AccessView.method%22%2C%22AccessView.url%22%2C%22AccessView.urlRoute%22%2C%22AccessView.fileDirection%22%5D%2C%22segments%22%3A%5B%22AccessView.org%22%2C%22AccessView.black%22%5D%2C%22timezone%22%3A%22Asia%2FShanghai%22%7D")
+check "fileCount by channel+host+method+url+urlRoute+fileDirection order desc (fileMd5=28d89a2b8f464a16b3b6e77ea833b981, fileDirection=下载)" "$result"
+
 echo "--- $pass passed, $fail failed ---"
 
 echo ""
